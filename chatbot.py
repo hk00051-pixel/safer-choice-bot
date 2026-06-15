@@ -13,7 +13,7 @@ if "GEMINI_API_KEY" in st.secrets:
 elif os.getenv("GEMINI_API_KEY"):
     API_KEY = os.getenv("GEMINI_API_KEY")
 else:
-    API_KEY = "AQ.Ab8RN6JaCmT9pacxp0vJM4YcYJyWTjPaXMenB0njip8xNRX5Qw"
+    API_KEY = "PASTE_YOUR_ACTUAL_AIZA_KEY_HERE"
 
 # Initialize the client globally
 client = genai.Client(api_key=API_KEY)
