@@ -8,7 +8,8 @@ from google.genai import types
 # Configure the browser page settings
 st.set_page_config(page_title="EPA Safer Choice Assistant", page_icon="🌱", layout="centered")
 
-# --- SECURE API KEY INITIALIZATION ---
+# --- SECURE API KEY INITIALIZATION (NO HARDCODING) ---
+# This safely pulls the key from Streamlit's hidden cloud memory
 if "GEMINI_API_KEY" in st.secrets:
     API_KEY = st.secrets["GEMINI_API_KEY"]
 elif os.getenv("GEMINI_API_KEY"):
@@ -28,7 +29,6 @@ def search_csv_for_keyword(user_query):
         return "No local product database available."
     try:
         df = pd.read_csv(csv_path)
-        # Pass the top 35 rows to stay safely within free token limits
         return df.head(35).to_string(index=False)
     except Exception as e:
         return f"Error reading database: {e}"
@@ -53,11 +53,10 @@ if user_input := st.chat_input("Ask about safer choice products..."):
 
     if not client:
         with st.chat_message("assistant"):
-            st.markdown("⚠️ **Configuration Setup:** Please configure GEMINI_API_KEY in your Streamlit Secrets panel.")
+            st.markdown("⚠️ **Secrets Missing:** Please add the GEMINI_API_KEY into your Streamlit Cloud Advanced Secrets dashboard panel.")
     else:
         inventory_context = search_csv_for_keyword(user_input)
 
-        # Updated security laws to enforce the strict "Not available" fallback response
         agent_system_instruction = (
             "SYSTEM IDENTITY & ROLE:\n"
             "You are an ultra-strict, expert AI customer service agent built exclusively for EPA Safer Choice products.\n\n"
@@ -73,23 +72,22 @@ if user_input := st.chat_input("Ask about safer choice products..."):
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
             
-            # --- AUTOMATED FREE VERSION LOOP ---
             success = False
-            for attempt in range(3):  # Auto-tries up to 3 times if Google's free tier is busy
+            for attempt in range(3):
                 try:
                     response = client.models.generate_content(
-                        model="gemini-2.5-flash-lite",  # High-limit model for excellent free performance
+                        model="gemini-2.5-flash-lite",
                         contents=user_input,
                         config=types.GenerateContentConfig(
                             system_instruction=agent_system_instruction,
-                            temperature=0.0  # Zero temperature means maximum predictability and strictness
+                            temperature=0.0
                         )
                     )
                     solution_text = response.text
                     message_placeholder.markdown(solution_text)
                     st.session_state.messages.append({"role": "assistant", "content": solution_text})
                     success = True
-                    break  # Success! Exit the retry loop
+                    break
                 except Exception as e:
                     error_str = str(e).lower()
                     if "429" in error_str or "exhausted" in error_str:
@@ -99,5 +97,5 @@ if user_input := st.chat_input("Ask about safer choice products..."):
                         message_placeholder.markdown(f"⚠️ *System message: {e}*")
                         break
             
-            if not success:
+            if not success and "429" in error_str:
                 message_placeholder.markdown("⚠️ *The free-tier server is heavily loaded right now. Please wait 10 seconds before typing your next request.*")
