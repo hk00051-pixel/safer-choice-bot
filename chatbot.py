@@ -8,8 +8,7 @@ from google.genai import types
 # Configure the browser page settings
 st.set_page_config(page_title="EPA Safer Choice Assistant", page_icon="🌱", layout="centered")
 
-# --- SECURE API KEY INITIALIZATION (NO HARDCODING) ---
-# This safely pulls the key from Streamlit's hidden cloud memory
+# --- SECURE API KEY INITIALIZATION ---
 if "GEMINI_API_KEY" in st.secrets:
     API_KEY = st.secrets["GEMINI_API_KEY"]
 elif os.getenv("GEMINI_API_KEY"):
@@ -29,19 +28,21 @@ def search_csv_for_keyword(user_query):
         return "No local product database available."
     try:
         df = pd.read_csv(csv_path)
-        return df.head(35).to_string(index=False)
+        return df.head(45).to_string(index=False)
     except Exception as e:
         return f"Error reading database: {e}"
 
 # --- STREAMLIT UI DESIGN ---
 st.title("🌱 EPA Safer Choice Assistant")
-st.caption("AI Agent powered by Gemini—focused exclusively on eco-safe verified items.")
+st.caption("Live AI Agent powered by Gemini—with full multi-turn chat memory tracking.")
 
+# Initialize standard chat timeline arrays
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "assistant", "content": "Welcome to the EPA Safer Choice Agent. Ask me anything about our eco-safe products!"}
     ]
 
+# Render interactive bubble historical logs
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -53,21 +54,36 @@ if user_input := st.chat_input("Ask about safer choice products..."):
 
     if not client:
         with st.chat_message("assistant"):
-            st.markdown("⚠️ **Secrets Missing:** Please add the GEMINI_API_KEY into your Streamlit Cloud Advanced Secrets dashboard panel.")
+            st.markdown("⚠️ **Secrets Missing:** Please confirm your GEMINI_API_KEY is active in your Streamlit panel.")
     else:
         inventory_context = search_csv_for_keyword(user_input)
 
+        # Rigid system configurations enforcing fallback protection patterns
         agent_system_instruction = (
-            "SYSTEM IDENTITY & ROLE:\n"
-            "You are an ultra-strict, expert AI customer service agent built exclusively for EPA Safer Choice products.\n\n"
+            "SYSTEM IDENTITY & MEMORY REASONING:\n"
+            "You are a live, conversational expert AI customer service agent built exclusively for EPA Safer Choice products.\n"
+            "You have complete memory retention of previous turns in this specific chat history. Always look back at prior lines to understand what product category the user is discussing.\n\n"
             "CRITICAL SECURITY LAWS:\n"
-            "1. You are ONLY allowed to answer questions explicitly related to household cleaning, eco-safe chemistry solutions, brands, or items found in the inventory dataset below.\n"
-            "2. If the user asks ANY random, conversational, or irrelevant question (e.g., math, history, coding, general knowledge, pop culture, life advice, recipes, sports, or chatting about things outside the dataset), you must reply EXACTLY with this phrase and absolutely nothing else: \n"
+            "1. You are ONLY allowed to discuss household cleaning, eco-safe chemistry, brands, or verified products listed inside the dataset below.\n"
+            "2. If the user asks ANY completely random, conversational, or irrelevant question (e.g., math, history, coding, space, general non-cleaning talk, or things unrelated to the database), you must reply EXACTLY with this phrase and absolutely nothing else:\n"
             "   'Not available.'\n"
-            "3. If they greet you politely (hi, hello), welcome them briefly and ask what cleaner or product they are searching for.\n"
-            "4. When discussing valid, relevant products, be concise, expert, helpful, and restrict answers to 2 sentences max.\n\n"
+            "3. Do not repeat greeting messages or say 'Hello!' if you have already greeted the user earlier in the chat logs.\n"
+            "4. When a user asks to 'suggest something good' or follow-up questions, look at the chat history to see what they were looking at before, pull a brand choice matching that category from the dataset, and give a clear recommendation in 2 sentences.\n\n"
             f"AVAILABLE VERIFIED INVENTORY DATA:\n{inventory_context}"
         )
+
+        # --- MEMORY COMPILER FOR LIVE AGENT TRANSCRIPT ---
+        # Converts Streamlit logs into formal structure objects Gemini naturally interprets
+        gemini_chat_history = []
+        for m in st.session_state.messages:
+            # Map roles accurately (Streamlit uses 'assistant', Gemini API requires 'model')
+            g_role = "user" if m["role"] == "user" else "model"
+            gemini_chat_history.append(
+                types.Content(
+                    role=g_role,
+                    parts=[types.Part.from_text(text=m["content"])]
+                )
+            )
 
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
@@ -77,10 +93,10 @@ if user_input := st.chat_input("Ask about safer choice products..."):
                 try:
                     response = client.models.generate_content(
                         model="gemini-2.5-flash-lite",
-                        contents=user_input,
+                        contents=gemini_chat_history,  # <-- FIX: Passes the whole live conversation history!
                         config=types.GenerateContentConfig(
                             system_instruction=agent_system_instruction,
-                            temperature=0.0
+                            temperature=0.2  # Low temperature preserves precise guardrails while maintaining natural memory flow
                         )
                     )
                     solution_text = response.text
