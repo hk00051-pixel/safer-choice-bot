@@ -57,16 +57,16 @@ if user_input := st.chat_input("Ask about safer choice products..."):
     else:
         inventory_context = search_csv_for_keyword(user_input)
 
-        # Rigid guardrail configuration matching your specifications exactly
+        # Updated security laws to enforce the strict "Not available" fallback response
         agent_system_instruction = (
             "SYSTEM IDENTITY & ROLE:\n"
-            "You are a strict, expert AI customer service agent built exclusively for EPA Safer Choice products.\n\n"
+            "You are an ultra-strict, expert AI customer service agent built exclusively for EPA Safer Choice products.\n\n"
             "CRITICAL SECURITY LAWS:\n"
-            "1. You are ONLY allowed to answer questions related to household cleaning, eco-safe solutions, brands, or items present in the inventory dataset below.\n"
-            "2. If the user asks ANY random or irrelevant question (e.g., math, history, coding, space, general life, recipe cooking, sports, chatting about things not in the dataset, etc.), you must ignore it entirely and reply EXACTLY with this line: \n"
-            "   'I am only here to help you about safer choice product or not available.'\n"
-            "3. If they greet you (hi, hello), welcome them warmly and ask what cleaner or product they are looking for.\n"
-            "4. When talking about relevant products, be concise, expert, helpful, and restrict answers to 2-3 sentences max.\n\n"
+            "1. You are ONLY allowed to answer questions explicitly related to household cleaning, eco-safe chemistry solutions, brands, or items found in the inventory dataset below.\n"
+            "2. If the user asks ANY random, conversational, or irrelevant question (e.g., math, history, coding, general knowledge, pop culture, life advice, recipes, sports, or chatting about things outside the dataset), you must reply EXACTLY with this phrase and absolutely nothing else: \n"
+            "   'Not available.'\n"
+            "3. If they greet you politely (hi, hello), welcome them briefly and ask what cleaner or product they are searching for.\n"
+            "4. When discussing valid, relevant products, be concise, expert, helpful, and restrict answers to 2 sentences max.\n\n"
             f"AVAILABLE VERIFIED INVENTORY DATA:\n{inventory_context}"
         )
 
@@ -82,7 +82,7 @@ if user_input := st.chat_input("Ask about safer choice products..."):
                         contents=user_input,
                         config=types.GenerateContentConfig(
                             system_instruction=agent_system_instruction,
-                            temperature=0.1  # Low temperature makes guardrails very rigid
+                            temperature=0.0  # Zero temperature means maximum predictability and strictness
                         )
                     )
                     solution_text = response.text
@@ -93,7 +93,6 @@ if user_input := st.chat_input("Ask about safer choice products..."):
                 except Exception as e:
                     error_str = str(e).lower()
                     if "429" in error_str or "exhausted" in error_str:
-                        # Inform user it's retrying instead of throwing a red crash screen
                         message_placeholder.markdown(f"⏳ *Free-tier busy... automatically retrying in {attempt + 2} seconds...*")
                         time.sleep(attempt + 2)
                     else:
@@ -101,3 +100,4 @@ if user_input := st.chat_input("Ask about safer choice products..."):
                         break
             
             if not success:
+                message_placeholder.markdown("⚠️ *The free-tier server is heavily loaded right now. Please wait 10 seconds before typing your next request.*")
