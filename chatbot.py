@@ -8,15 +8,20 @@ from google.genai import types
 st.set_page_config(page_title="EPA Safer Choice Assistant", page_icon="🌱", layout="centered")
 
 # --- SECURE API KEY INITIALIZATION ---
+# Automatically pulls the key from Streamlit's cloud secrets vault
 if "GEMINI_API_KEY" in st.secrets:
     API_KEY = st.secrets["GEMINI_API_KEY"]
 elif os.getenv("GEMINI_API_KEY"):
     API_KEY = os.getenv("GEMINI_API_KEY")
 else:
-    API_KEY = "AIzaSyAQ.Ab8RN6JaCmT9pacxp0vJM4YcYJyWTjPaXMenB0njip8xNRX5Qw"
+    # Safe fallback so the app does not crash on boot
+    API_KEY = None
 
 # Initialize the client globally
-client = genai.Client(api_key=API_KEY)
+if API_KEY:
+    client = genai.Client(api_key=API_KEY)
+else:
+    client = None
 
 def search_csv_for_keyword(user_query):
     """Filters conversational words and searches CSV data with a smart fallback."""
@@ -73,37 +78,44 @@ if user_input := st.chat_input("Ask about safer choice products..."):
         st.markdown(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
 
-    # Fetch context from spreadsheet matching keywords
-    relevant_inventory = search_csv_for_keyword(user_input)
+    # If API key is missing entirely from settings
+    if not client:
+        with st.chat_message("assistant"):
+            st.markdown("⚠️ *API Key missing. Please configure GEMINI_API_KEY in your Streamlit Advanced Settings.*")
+    else:
+        # Fetch context from spreadsheet matching keywords
+        relevant_inventory = search_csv_for_keyword(user_input)
 
-    # Build direct, strict instructions matching your requirements
-    strict_rules = (
-        "You are an automated customer service assistant specialized in EPA Safer Choice products.\n"
-        "Your goal is to answer user questions using the local inventory context provided below.\n\n"
-        "CRITICAL OPERATION LAWS:\n"
-        "1. If the user message is a simple hello, hi, or generic greeting, reply politely and ask how you can help.\n"
-        "2. Answer questions using the data provided below. Do not say 'Information not available' if there are products present in the dataset.\n"
-        "3. Keep your answers straight to the point and restricted to 1 or 2 sentences max.\n\n"
-        f"CURRENT AVAILABLE INVENTORY DATA:\n{relevant_inventory}"
-    )
+        # Build direct, strict instructions matching your requirements
+        strict_rules = (
+            "You are an automated customer service assistant specialized in EPA Safer Choice products.\n"
+            "Your goal is to answer user questions using the local inventory context provided below.\n\n"
+            "CRITICAL OPERATION LAWS:\n"
+            "1. If the user message is a simple hello, hi, or generic greeting, reply politely and ask how you can help.\n"
+            "2. Answer questions using the data provided below. Do not say 'Information not available' if there are products present in the dataset.\n"
+            "3. Keep your answers straight to the point and restricted to 1 or 2 sentences max.\n\n"
+            f"CURRENT AVAILABLE INVENTORY DATA:\n{relevant_inventory}"
+        )
 
-    # Request response streaming directly into the web layout
-    with st.chat_message("assistant"):
-        message_placeholder = st.empty()
-        try:
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=user_input,
-                config=types.GenerateContentConfig(
-                    system_instruction=strict_rules
+        # Request response streaming directly into the web layout
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            try:
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=user_input,
+                    config=types.GenerateContentConfig(
+                        system_instruction=strict_rules
+                    )
                 )
-            )
-            solution_text = response.text
-            message_placeholder.markdown(solution_text)
-            st.session_state.messages.append({"role": "assistant", "content": solution_text})
-            
-        except Exception as e:
-            error_text = "Quota cooldown active. Please wait 15-20 seconds before typing your next request."
-            if "429" not in str(e):
-                error_text = f"An error occurred: {e}"
-            message_placeholder.markdown(f"⚠️ *{error_text}*")
+                solution_text = response.text
+                message_placeholder.markdown(solution_text)
+                st.session_state.messages.append({"role": "assistant", "content": solution_text})
+                
+            except Exception as e:
+                error_text = "Quota cooldown active. Please wait 15-20 seconds before typing your next request."
+                if "400" in str(e) or "401" in str(e):
+                    error_text = "Invalid API Key stored in Streamlit Secrets. Please check your Google AI Studio account."
+                elif "429" not in str(e):
+                    error_text = f"An error occurred: {e}"
+                message_placeholder.markdown(f"⚠️ *{error_text}*")
