@@ -7,23 +7,27 @@ from google.genai import types
 # Configure the browser page settings
 st.set_page_config(page_title="EPA Safer Choice Assistant", page_icon="🌱", layout="centered")
 
-
 # --- SECURE API KEY INITIALIZATION ---
-# First, try to get the key from Streamlit Cloud Secrets (Production)
 if "GEMINI_API_KEY" in st.secrets:
     API_KEY = st.secrets["GEMINI_API_KEY"]
-# Second, try to get it from local environment variables (Development)
 elif os.getenv("GEMINI_API_KEY"):
     API_KEY = os.getenv("GEMINI_API_KEY")
-# Final Fallback: Hardcode your key directly here if the above methods fail
 else:
     API_KEY = AQ.Ab8RN6JaCmT9pacxp0vJM4YcYJyWTjPaXMenB0njip8xNRX5Qw
+
+# Initialize the client globally
+client = genai.Client(api_key=API_KEY)
+
 def search_csv_for_keyword(user_query):
-    """ Filters conversational words and searches CSV data with a smart fallback."""
+    """Filters conversational words and searches CSV data with a smart fallback."""
     csv_path = "products.csv"
     
     if not os.path.exists(csv_path):
         return "No local product database available."
+        
+    try:
+        df = pd.read_csv(csv_path)
+        filler_words = {
             "i", "need", "a", "an", "the", "want", "find", "look", "looking", 
             "for", "give", "me", "show", "tell", "about", "is", "are", "any", 
             "please", "help", "with", "safer", "choice", "product", "products"
@@ -32,7 +36,6 @@ def search_csv_for_keyword(user_query):
         query_words = [w.strip().lower() for w in user_query.split()]
         search_terms = [w for w in query_words if w not in filler_words and len(w) > 1]
         
-        # If no specific words found, give the first 10 rows as context
         if not search_terms:
             return df.head(10).to_string(index=False)
             
