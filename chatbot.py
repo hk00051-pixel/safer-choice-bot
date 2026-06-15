@@ -7,17 +7,20 @@ from google.genai import types
 # Configure the browser page settings
 st.set_page_config(page_title="EPA Safer Choice Assistant", page_icon="🌱", layout="centered")
 
-# 🔴 PLUG YOUR ACTUAL GEMINI API KEY DIRECTLY HERE BETWEEN THE QUOTES
-API_KEY = "AQ.Ab8RN6JaCmT9pacxp0vJM4YcYJyWTjPaXMenB0njip8xNRX5Qw"
 
-# Initialize the client globally so it is always defined
+# --- SECURE API KEY INITIALIZATION ---
+# First, try to get the key from Streamlit Cloud Secrets (Production)
+if "GEMINI_API_KEY" in st.secrets:
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+# Second, try to get it from local environment variables (Development)
+elif os.getenv("GEMINI_API_KEY"):
+    API_KEY = os.getenv("GEMINI_API_KEY")
+# Final Fallback: Hardcode your key directly here if the above methods fail
+else:
+    API_KEY = AQ.Ab8RN6JaCmT9pacxp0vJM4YcYJyWTjPaXMenB0njip8xNRX5Qw
+
+# Initialize the client globally
 client = genai.Client(api_key=API_KEY)
-
-def search_csv_for_keyword(user_query):
-    """Filters conversational words and searches CSV data with a smart fallback."""
-    csv_path = "/Users/humayrakabir/Desktop/products.csv"
-    
-    if not os.path.exists(csv_path):
         csv_path = "products.csv"
         if not os.path.exists(csv_path):
             return "No local product database available."
