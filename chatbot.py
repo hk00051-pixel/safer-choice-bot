@@ -18,16 +18,12 @@ elif os.getenv("GEMINI_API_KEY"):
 # Final Fallback: Hardcode your key directly here if the above methods fail
 else:
     API_KEY = AQ.Ab8RN6JaCmT9pacxp0vJM4YcYJyWTjPaXMenB0njip8xNRX5Qw
-
-# Initialize the client globally
-client = genai.Client(api_key=API_KEY)
-        csv_path = "products.csv"
-        if not os.path.exists(csv_path):
-            return "No local product database available."
-        
-    try:
-        df = pd.read_csv(csv_path)
-        filler_words = {
+def search_csv_for_keyword(user_query):
+    """ Filters conversational words and searches CSV data with a smart fallback."""
+    csv_path = "products.csv"
+    
+    if not os.path.exists(csv_path):
+        return "No local product database available."
             "i", "need", "a", "an", "the", "want", "find", "look", "looking", 
             "for", "give", "me", "show", "tell", "about", "is", "are", "any", 
             "please", "help", "with", "safer", "choice", "product", "products"
