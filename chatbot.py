@@ -28,7 +28,7 @@ def search_csv_for_keyword(user_query):
         return "No local product database available."
     try:
         df = pd.read_csv(csv_path)
-        # Pass the top 35 rows to stay inside free-tier token limits safely
+        # Pass the top 35 rows to stay safely within free token limits
         return df.head(35).to_string(index=False)
     except Exception as e:
         return f"Error reading database: {e}"
@@ -53,17 +53,17 @@ if user_input := st.chat_input("Ask about safer choice products..."):
 
     if not client:
         with st.chat_message("assistant"):
-            st.markdown("⚠️ **Configuration Setup:** Please insert your API key into your Streamlit Secrets panel.")
+            st.markdown("⚠️ **Configuration Setup:** Please configure GEMINI_API_KEY in your Streamlit Secrets panel.")
     else:
         inventory_context = search_csv_for_keyword(user_input)
 
-        # Rigid guardrail configuration matching your direct specifications
+        # Rigid guardrail configuration matching your specifications exactly
         agent_system_instruction = (
             "SYSTEM IDENTITY & ROLE:\n"
             "You are a strict, expert AI customer service agent built exclusively for EPA Safer Choice products.\n\n"
             "CRITICAL SECURITY LAWS:\n"
             "1. You are ONLY allowed to answer questions related to household cleaning, eco-safe solutions, brands, or items present in the inventory dataset below.\n"
-            "2. If the user asks ANY random or irrelevant question (e.g., math, history, coding, space, general life, recipe cooking, sports, chatting about other things, etc.), you must ignore it entirely and reply EXACTLY with this line: \n"
+            "2. If the user asks ANY random or irrelevant question (e.g., math, history, coding, space, general life, recipe cooking, sports, chatting about things not in the dataset, etc.), you must ignore it entirely and reply EXACTLY with this line: \n"
             "   'I am only here to help you about safer choice product or not available.'\n"
             "3. If they greet you (hi, hello), welcome them warmly and ask what cleaner or product they are looking for.\n"
             "4. When talking about relevant products, be concise, expert, helpful, and restrict answers to 2-3 sentences max.\n\n"
@@ -72,26 +72,32 @@ if user_input := st.chat_input("Ask about safer choice products..."):
 
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
-            try:
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=user_input,
-                    config=types.GenerateContentConfig(
-                        system_instruction=agent_system_instruction,
-                        temperature=0.1  # Set ultra-low for extreme strictness on guardrails
+            
+            # --- AUTOMATED FREE VERSION LOOP ---
+            success = False
+            for attempt in range(3):  # Auto-tries up to 3 times if Google's free tier is busy
+                try:
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash-lite",  # High-limit model for excellent free performance
+                        contents=user_input,
+                        config=types.GenerateContentConfig(
+                            system_instruction=agent_system_instruction,
+                            temperature=0.1  # Low temperature makes guardrails very rigid
+                        )
                     )
-                )
-                solution_text = response.text
-                message_placeholder.markdown(solution_text)
-                st.session_state.messages.append({"role": "assistant", "content": solution_text})
-                
-            except Exception as e:
-                # --- AUTOMATED FREE VERSION CIRCUIT BREAKER ---
-                error_str = str(e).lower()
-                if "429" in error_str or "exhausted" in error_str:
-                    # Clear the error look and replace with a professional countdown
-                    message_placeholder.markdown("⏳ *Google Free-Tier limit reached. Taking a brief 10-second cool-down to reset...*")
-                    time.sleep(10)
-                    message_placeholder.markdown("🔄 *Cool-down complete! Please type your question one more time.*")
-                else:
-                    message_placeholder.markdown(f"⚠️ *System message: {e}*")
+                    solution_text = response.text
+                    message_placeholder.markdown(solution_text)
+                    st.session_state.messages.append({"role": "assistant", "content": solution_text})
+                    success = True
+                    break  # Success! Exit the retry loop
+                except Exception as e:
+                    error_str = str(e).lower()
+                    if "429" in error_str or "exhausted" in error_str:
+                        # Inform user it's retrying instead of throwing a red crash screen
+                        message_placeholder.markdown(f"⏳ *Free-tier busy... automatically retrying in {attempt + 2} seconds...*")
+                        time.sleep(attempt + 2)
+                    else:
+                        message_placeholder.markdown(f"⚠️ *System message: {e}*")
+                        break
+            
+            if not success:
